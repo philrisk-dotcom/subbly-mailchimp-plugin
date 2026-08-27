@@ -1,0 +1,20 @@
+{
+  "name": "subbly-mailchimp-plugin",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Subbly marketplace repo for the Mailchimp Newsletter plugin.",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:cli": "subbly-plugin-lint"
+  },
+  "devDependencies": {
+    "@eslint/json": "^2.0.1",
+    "@eslint/markdown": "^8.0.3",
+    "@subbly/plugin-lint": "^0.0.1",
+    "eslint": "^10.8.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

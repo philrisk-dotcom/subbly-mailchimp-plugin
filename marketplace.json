@@ -1,0 +1,14 @@
+{
+  "$schema": "./schemas/marketplace.schema.json",
+  "slug": "subbly-mailchimp-plugin",
+  "version": "0.1.0",
+  "plugins": [
+    {
+      "slug": "subbly-mailchimp",
+      "source": {
+        "type": "local",
+        "path": "plugins/subbly-mailchimp"
+      }
+    }
+  ]
+}

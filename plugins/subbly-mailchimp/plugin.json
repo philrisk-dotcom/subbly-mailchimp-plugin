@@ -1,0 +1,42 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "subbly-mailchimp",
+  "description": "Capture newsletter sign-ups on your storefront with a timed modal and send them to Mailchimp: it subscribes the contact to your audience, applies a tag and adds them to a segment. Collects your Mailchimp API key, segment and tag at install.",
+  "author": {
+    "name": "Subbly",
+    "url": "https://www.subbly.co"
+  },
+  "extensions": {
+    "co.subbly.builder": {
+      "displayName": "Mailchimp Newsletter",
+      "setup": true,
+      "fields": [
+        {
+          "key": "API_KEY",
+          "label": "Mailchimp API key",
+          "type": "text",
+          "secret": true,
+          "required": true,
+          "pattern": "[0-9a-f]{32}-[a-z]{2,}[0-9]{1,3}"
+        },
+        {
+          "key": "SEGMENT_ID",
+          "label": "Segment ID or name",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "TAG",
+          "label": "Tag",
+          "type": "text",
+          "required": true
+        },
+        {
+          "key": "AUDIENCE_ID",
+          "label": "Audience ID (optional, leave blank to use your only audience)",
+          "type": "text"
+        }
+      ]
+    }
+  }
+}

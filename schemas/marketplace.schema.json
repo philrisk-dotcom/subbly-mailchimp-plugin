@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://subbly.co/schemas/marketplace.schema.json",
+  "title": "Subbly plugin marketplace",
+  "description": "Lists every plugin in this repository and carries the release version. Mirrors marketplaceManifestSchema in subbly-builder (packages/plugins/src/marketplace/marketplace-manifest.ts).",
+  "type": "object",
+  "required": ["slug", "version", "plugins"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Editor hint only. The builder strips unknown keys, so this never reaches the release."
+    },
+    "slug": {
+      "$ref": "#/definitions/slug",
+      "description": "Identifies this marketplace. Stored in a UNIQUE column, so it must not clash with another marketplace."
+    },
+    "version": {
+      "type": "string",
+      "maxLength": 50,
+      "pattern": "^\\d+\\.\\d+\\.\\d+(-[a-z0-9]+(\\.[a-z0-9]+)*)?$",
+      "description": "The release trigger. Bump it and merge to main, or nothing ships. X.Y.Z with an optional lowercase pre-release suffix such as -beta or -beta.1.",
+      "examples": ["0.5.0", "1.0.0", "1.0.0-beta.1"]
+    },
+    "plugins": {
+      "type": "array",
+      "description": "Every plugin this marketplace publishes. Removing an entry archives that plugin: no new installs, and existing installs show it as no longer available.",
+      "items": { "$ref": "#/definitions/entry" }
+    }
+  },
+  "definitions": {
+    "slug": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64,
+      "pattern": "^[a-z0-9](?:[a-z0-9]|[-.](?=[a-z0-9]))*$",
+      "description": "1-64 lowercase alphanumerics with single - or . separators, starting and ending alphanumeric."
+    },
+    "entry": {
+      "type": "object",
+      "required": ["slug", "source"],
+      "properties": {
+        "slug": {
+          "$ref": "#/definitions/slug",
+          "description": "The plugin identity. Must equal the plugin.json name. Must stay unique across the marketplace AFTER . and - are both mapped to _, because the slug becomes an env var prefix. Must also not be claimed by another marketplace."
+        },
+        "published": {
+          "type": "boolean",
+          "description": "Set false to hide the plugin from the marketplace: only shops with the unpublished-plugins feature flag enabled in the builder admin can see and install it. Omit (or true) to publish to everyone. Flipping it is a content change, so it releases only with a version bump. Existing installations are never touched.",
+          "examples": [false]
+        },
+        "source": {
+          "type": "object",
+          "required": ["type", "path"],
+          "properties": {
+            "type": {
+              "const": "local",
+              "description": "Only local sources exist. The plugin lives in this repository."
+            },
+            "path": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*(/[A-Za-z0-9][A-Za-z0-9._-]*)*$",
+              "description": "Directory holding the plugin, relative to the repository root. Every / separated segment must start alphanumeric. No leading /, no .., no dot-leading segment. House convention is plugins/<slug>.",
+              "examples": ["plugins/subbly"]
+            }
+          }
+        }
+      }
+    }
+  }
+}
