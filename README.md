@@ -1,6 +1,6 @@
 # subbly-mailchimp-plugin
 
-Subbly marketplace repo for the **Mailchimp Newsletter** plugin.
+Subbly marketplace repo for the **Mailchimp** plugin.
 
 It captures newsletter sign-ups on the storefront with a timed modal (First name, Last
 name, Email) and sends them to Mailchimp: subscribes the contact to the audience,
@@ -12,8 +12,7 @@ the storefront.
 
 - `marketplace.json` — lists the plugin by slug. The `version` bump is the only release trigger.
 - `plugins/subbly-mailchimp/plugin.json` — manifest: display name, config fields, `setup: true`.
-- `plugins/subbly-mailchimp/skills/install/SKILL.md` — the setup-chat procedure.
-- `plugins/subbly-mailchimp/skills/newsletter-modal/SKILL.md` — the build reference: the `/api/newsletter` route and the modal component.
+- `plugins/subbly-mailchimp/skills/install/SKILL.md` — the setup-chat procedure and the build reference (the `/api/newsletter` route and the modal component), in one skill.
 
 ## Develop
 

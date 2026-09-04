@@ -8,7 +8,7 @@
   },
   "extensions": {
     "co.subbly.builder": {
-      "displayName": "Mailchimp Newsletter",
+      "displayName": "Mailchimp",
       "setup": true,
       "fields": [
         {

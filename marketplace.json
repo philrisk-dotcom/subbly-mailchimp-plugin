@@ -5,6 +5,7 @@
   "plugins": [
     {
       "slug": "subbly-mailchimp",
+      "published": false,
       "source": {
         "type": "local",
         "path": "plugins/subbly-mailchimp"
