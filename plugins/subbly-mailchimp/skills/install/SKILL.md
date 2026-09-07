@@ -1,116 +1,110 @@
 ---
 name: install
-description: Set up and maintain the Mailchimp newsletter modal on the storefront. Use in the setup chat, and again whenever the modal or the /api/newsletter route is missing, its copy, styling, delay or pages need to change, or sign-ups are not reaching Mailchimp.
+description: Set up the Mailchimp newsletter modal on the storefront and keep it working. Use in the setup chat; when the modal or its /api/newsletter route is missing; when its copy, delay, styling or which pages it shows on change; when sign-ups stop reaching Mailchimp.
 ---
 
 # Mailchimp newsletter setup and modal
 
-Goal: the homepage shows a modal 10 seconds after load, capturing First name, Last name and Email; submitting it subscribes the contact to the Mailchimp audience, applies the configured tag, and adds them to the configured segment. The browser never calls Mailchimp directly: the API key is a secret and Mailchimp sends no CORS headers, so every sign-up must go through a server route.
+The homepage shows a modal 10 seconds after load capturing First name, Last name and Email; submitting it subscribes the contact to the Mailchimp audience, applies the tag, and adds them to the segment. The browser cannot reach Mailchimp (no CORS, and the key must not ship to the client), so a server route brokers every sign-up.
 
-## Config
+## 1. Check config and connection
 
-Collected by the install form, read by the server route only:
+The config fields arrive as `PLUGIN_SUBBLY_MAILCHIMP__API_KEY` (secret), `PLUGIN_SUBBLY_MAILCHIMP__SEGMENT_ID`, `PLUGIN_SUBBLY_MAILCHIMP__TAG` and the optional `PLUGIN_SUBBLY_MAILCHIMP__AUDIENCE_ID`. If any of the first three is empty, ask the user to fill the plugin's config fields in project settings and wait.
 
-| Env var | From field | Use |
-| --- | --- | --- |
-| `PLUGIN_SUBBLY_MAILCHIMP__API_KEY` | API key (secret) | Auth. The part after `-` is the data centre (`...-us11` -> `us11`). |
-| `PLUGIN_SUBBLY_MAILCHIMP__SEGMENT_ID` | Segment ID or name | Static segment to add the contact to. Digits are used as-is; a name is resolved against the audience's segments. |
-| `PLUGIN_SUBBLY_MAILCHIMP__TAG` | Tag | Tag applied to every contact. Created by Mailchimp on first use. |
-| `PLUGIN_SUBBLY_MAILCHIMP__AUDIENCE_ID` | Audience ID (optional) | The list. Blank means "auto-detect the one audience on the account". |
+The data centre is the API key suffix after `-` (`...-us11` means `us11`). Call `GET https://<dc>.api.mailchimp.com/3.0/ping` with `execute_command`, authenticated as HTTP Basic `any:<API_KEY>`.
 
-Never read these in client code and never inline them into a component. If `API_KEY`, `SEGMENT_ID` or `TAG` is empty, stop and ask the user to fill the plugin's config fields in project settings, then continue.
-
-## 1. Verify the connection
-
-The data centre is the suffix of the API key after `-`. Call `GET https://<dc>.api.mailchimp.com/3.0/ping` with `execute_command`, authenticated as HTTP Basic `any:<API_KEY>`.
-
-A healthy key returns `health_status: "Everything's Chimpy!"`. A 401 means the key is wrong: ask the user to re-copy it from Mailchimp (Account > Extras > API keys) and stop.
+Done: the ping returns `health_status: "Everything's Chimpy!"`. On 401, tell the user to re-copy the key from Mailchimp (Account > Extras > API keys) and stop.
 
 ## 2. Resolve the audience
 
-If `AUDIENCE_ID` is set, trust it. Otherwise call `GET /lists` on the same base URL, asking for `lists.id` and `lists.name`.
+If `AUDIENCE_ID` is set, use it. Otherwise call `GET /lists` for `lists.id` and `lists.name`.
 
-- One audience: the route auto-detects it, nothing to do. Note its id for the checks below.
-- Several: ask the user which one, then tell them to put that id in the `AUDIENCE_ID` config field. The route needs it to disambiguate.
-- None: the user must create an audience in Mailchimp first.
+- One audience: note its id.
+- Several: ask the user which one and tell them to set the `AUDIENCE_ID` field to that id.
+- None: tell the user to create an audience in Mailchimp, then stop.
+
+Done: you hold exactly one audience id.
 
 ## 3. Resolve the segment
 
-Call `GET /lists/<audience>/segments` asking for `segments.id`, `segments.name` and `segments.type`. Match `SEGMENT_ID` by numeric id, or by name (case-insensitive) against a `type: "static"` segment.
+Call `GET /lists/<audience>/segments` for `segments.id`, `segments.name` and `segments.type`. Match `SEGMENT_ID` by numeric id, or by case-insensitive name against a `type: "static"` segment.
 
-- Match found and static: good.
-- Match is `type: "saved"`: a saved segment updates itself by rules and cannot take members added by the route. Tell the user; the tag will still be applied. Suggest they point `SEGMENT_ID` at a static segment (or the tag's name) instead.
-- No match: offer to create one — `POST /lists/<audience>/segments` with `name` set to the `SEGMENT_ID` value and an empty `static_segment` array — only after the user agrees.
+- Static match: note its id.
+- `type: "saved"` match: tell the user a saved segment cannot take members from the route, so only the tag will apply, and suggest they point `SEGMENT_ID` at a static segment or the tag name.
+- No match: offer to create a static segment named after the `SEGMENT_ID` value (`POST /lists/<audience>/segments` with `name` and an empty `static_segment` array), and create it only if the user agrees.
 
-## 4. The tag
+Done: `SEGMENT_ID` maps to a static segment id, or the user has accepted that it is tag-only.
 
-Nothing to configure. Mailchimp creates the tag the first time the route applies it. Just confirm the exact tag name with the user (it is case-sensitive in the Mailchimp UI).
+## 4. Confirm the tag
 
-## Mailchimp Marketing API reference
+Mailchimp creates the tag on first use. Confirm the exact spelling with the user; the name is case-sensitive in the Mailchimp UI.
 
-- Base URL: `https://<dc>.api.mailchimp.com/3.0`.
-- Auth header: `Authorization: Basic base64("any:" + API_KEY)`.
-- Subscriber hash: lowercase the email, then MD5. All member and tag endpoints key off this hash.
-- Upsert a member: `PUT /lists/{audience}/members/{hash}` with `status_if_new: "subscribed"` and `merge_fields: { FNAME, LNAME }`. Using `status_if_new` (not `status`) avoids the "cannot resubscribe" error on a contact who unsubscribed earlier.
-- An existing contact comes back as HTTP 400 with `title: "Member Exists"`. Treat that as success.
-- A junk address comes back as HTTP 400 with `detail` containing "looks fake". Surface that as a validation message, not a server error.
-- Apply the tag: `POST /lists/{audience}/members/{hash}/tags` with `tags: [{ name: TAG, status: "active" }]`. Works for new and existing contacts.
-- Add to a static segment: `POST /lists/{audience}/segments/{segmentId}/members` with `email_address`. Saved (auto-updating) segments reject this; keep the call non-fatal.
+Done: the user has confirmed the tag name.
 
-## 5. Wire the modal and route into the storefront
+## 5. Build the route and modal
 
-Create these if missing, or edit them in place when only styling, copy or behaviour needs to change. Implement to the contract below in whatever style fits the storefront's own conventions (framework, TypeScript strictness, component library); nothing here is a snippet to paste verbatim.
+Work in the storefront's own framework and component conventions; adapt the contracts in the Reference section rather than pasting them.
 
-### Server route — `app/api/newsletter/route.ts`
+- Create or update `app/api/newsletter/route.ts` (or `pages/api/newsletter.ts` on the Pages Router) to the Route contract.
+- Create or update `components/NewsletterModal.tsx` to the Modal contract, reusing the storefront's Dialog, Button and Input components and design tokens where they exist.
+- Render the modal from the homepage component `app/page.tsx`, not the root layout. If it must sit in a shared layout, gate it on the current route being `/`.
 
-(Next.js App Router; if the storefront still uses `pages/`, use `pages/api/newsletter.ts` with the same contract.)
-
-Handles `POST` only, reading the four env vars above. Contract:
-
-- Reject with 500 if `API_KEY` is unset.
-- Parse the JSON body for `firstName`, `lastName`, `email`. Reject malformed JSON with 400.
-- Trim and lowercase the email; reject with 400 and `"Please enter a valid email address."` if it fails a basic email shape check.
-- Resolve the audience once (env var, or the single audience found via `GET /lists`; cache it for the life of the server process). Resolve the segment once the same way, following the matching rule in step 3, and cache it too.
-- Upsert the member per the API reference above. A non-"Member Exists" failure returns 502, except a "looks fake" detail, which returns 400 with the same validation message as above.
-- Apply the tag; non-fatal on failure.
-- Add to the resolved segment, if any; non-fatal on failure.
-- Respond `{ ok: true }` on success.
-
-### Modal component — `components/NewsletterModal.tsx`
-
-Behaviour is the contract; markup and styling should match the storefront's design system (its own Dialog/Button/Input components and tokens) rather than introducing new ones where equivalents already exist.
-
-- Client component. On mount, checks a `localStorage` key (e.g. `subbly-mailchimp-newsletter:seen`) — if already set, never opens. Otherwise starts a 10-second timer before opening.
-- Renders nothing while closed.
-- While open: a dismissible dialog (overlay click, close button, and ideally Escape) with `role="dialog"`, `aria-modal="true"`, and a labelled heading.
-- Closing it (by any means) or a successful submit writes the `localStorage` key so it never reopens for that visitor.
-- The form: First name, Last name, Email inputs, all required, sensible `autoComplete` values, a submit button that disables and shows a busy label while the request is in flight.
-- On submit: POST JSON `{ firstName, lastName, email }` to `/api/newsletter`. On failure, show the response's `error` message (falling back to a generic one) without closing the modal. On success, replace the form with a short thank-you message.
-
-### Mount it on the homepage only
-
-Render the modal from the homepage component (`app/page.tsx`), not the root layout, so the 10-second timer is scoped to the homepage. If it has to live in a shared layout for structural reasons, gate it on the current route being `/` instead.
-
-### Adjustments
-
-- **Delay**: the 10-second constant.
-- **Frequency**: the `localStorage` key currently suppresses the modal permanently once seen or submitted. To re-show after N days, store the timestamp (already implied) and compare it on load instead of a boolean presence check.
-- **More pages**: mount the component on those pages too; each page load runs its own timer.
-- **Double opt-in**: if the audience requires confirmed opt-in, switch the route's `status_if_new` to `"pending"`; Mailchimp then emails a confirmation link and the contact is not counted until they click it.
+Done: the three edits are in place and the preview builds with no error.
 
 ## 6. Test end to end
 
-1. In the preview, open the homepage and wait 10 seconds for the modal.
-2. Submit with a real address you control (a `you+test@yourdomain` alias is fine). Confirm the form shows the thank-you message.
-3. Check Mailchimp: the contact is in the audience with the first and last name, has the tag, and is in the segment.
-4. Archive the test contact.
+Open the homepage in the preview, wait 10 seconds, and submit with a real address you control (a `you+test@yourdomain` alias works). Confirm the modal shows the thank-you message. In Mailchimp, confirm the contact carries the first and last name, the tag and the segment, then archive the test contact. If the submit fails, read the `/api/newsletter` response and the server logs.
 
-If step 2 fails, read the `/api/newsletter` response in the network panel and the server logs. The route should return a specific message for addresses Mailchimp rejects and a generic one for anything else.
+Done: a real submission appears in Mailchimp with the name, tag and segment.
 
-## Gotchas
+## Reference
 
-- The API key is a secret. It stays in the environment, is read only by the server route, and is never pasted into the chat, committed, or referenced from client code.
-- The browser cannot call Mailchimp directly (no CORS, and the key would leak). Every sign-up goes through `/api/newsletter`.
-- A contact who previously unsubscribed will not be silently resubscribed; using `status_if_new` is expected, not a bug.
-- If the audience enforces confirmed (double) opt-in, sign-ups sit as "pending" until the contact clicks the confirmation email.
-- Config changes reach a running preview only on the next sync.
+### Config
+
+| Env var | From field | Meaning |
+| --- | --- | --- |
+| `PLUGIN_SUBBLY_MAILCHIMP__API_KEY` | API key (secret) | Auth. Read by the server route only. |
+| `PLUGIN_SUBBLY_MAILCHIMP__SEGMENT_ID` | Segment ID or name | Digits are an id; text is resolved against the audience's static segments. |
+| `PLUGIN_SUBBLY_MAILCHIMP__TAG` | Tag | Applied to every contact. |
+| `PLUGIN_SUBBLY_MAILCHIMP__AUDIENCE_ID` | Audience ID (optional) | Blank means the route auto-detects the one audience on the account. |
+
+A saved config change reaches a running preview only at the next sync.
+
+### Route contract
+
+`POST` only, reading the four env vars.
+
+- Respond 500 when `API_KEY` is unset.
+- Parse `firstName`, `lastName`, `email` from the JSON body; respond 400 on malformed JSON.
+- Trim and lowercase the email; respond 400 with `"Please enter a valid email address."` when it fails a basic shape check.
+- Resolve the audience and the segment once each (env var, or the lookups from steps 2 and 3) and cache both for the process lifetime.
+- Upsert the member per the Mailchimp API notes. Respond 502 on a failure that is not `"Member Exists"`, except a `"looks fake"` detail, which returns 400 with the validation message above.
+- Apply the tag, then add to the resolved segment. Both are non-fatal on failure.
+- Respond `{ ok: true }` on success.
+
+### Modal contract
+
+- Client component. On mount it reads the `localStorage` key `subbly-mailchimp-newsletter:seen`; if present it stays closed, otherwise it opens after a 10-second timer. It renders nothing while closed.
+- Open state is a dialog with `role="dialog"`, `aria-modal="true"` and a labelled heading, closable by overlay click, a close button and Escape.
+- Closing by any means, and a successful submit, write the `localStorage` key so the modal stays closed for that visitor.
+- The form has First name, Last name and Email inputs with `autoComplete` `given-name`, `family-name` and `email`, all required, and a submit button that disables and shows a busy label during the request.
+- Submit sends JSON `{ firstName, lastName, email }` to `/api/newsletter`. A failed response keeps the modal open and shows the response `error` text, or a generic message. A success replaces the form with a short thank-you message.
+
+### Mailchimp API notes
+
+- Base URL `https://<dc>.api.mailchimp.com/3.0`; auth header `Authorization: Basic base64("any:" + API_KEY)`.
+- Subscriber hash: the lowercased email, MD5-hashed. Member and tag endpoints key off it.
+- Upsert: `PUT /lists/{audience}/members/{hash}` with `status_if_new: "subscribed"` and `merge_fields: { FNAME, LNAME }`. `status_if_new` rather than `status` leaves an earlier unsubscribe untouched instead of erroring.
+- Tag: `POST /lists/{audience}/members/{hash}/tags` with `tags: [{ name: TAG, status: "active" }]`.
+- Segment: `POST /lists/{audience}/segments/{segmentId}/members` with `email_address`.
+
+### Changing the modal later
+
+- **Delay**: the 10-second timer constant.
+- **Frequency**: the `localStorage` key suppresses the modal for good once set. To re-show after N days, store a timestamp and compare it on load.
+- **Pages**: mount the component on other pages too; each page load runs its own timer.
+- **Double opt-in**: for an audience that requires confirmed opt-in, set the route's `status_if_new` to `"pending"`; Mailchimp then emails a confirmation link and leaves the contact uncounted until they click it.
+
+### Security
+
+The API key is a secret: it stays in the server environment and never appears in client code, the chat, or a commit.
