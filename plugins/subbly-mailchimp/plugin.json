@@ -9,6 +9,7 @@
   "extensions": {
     "co.subbly.builder": {
       "displayName": "Mailchimp",
+      "image": "cover.png",
       "setup": true,
       "fields": [
         {
